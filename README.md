@@ -4,7 +4,7 @@ nagios check for uptime via SNMP for Windows, Linux, Cisco
 This script will check the uptime and alert on recent reboots
 
 # Requirements
-You will need to enable SNMP on the monitored device.  Windows / Linux / Cisco / etc are supported.
+You will need to enable SNMP on the monitored device.  Windows / Linux / Cisco / etc are supported.  Other devices using same SNMP OID values work as well.
 
 # Usage
 Add the following section to services.cfg on the nagios server
