@@ -12,7 +12,7 @@ Add the following section to services.cfg on the nagios server
 # Check uptime via SNMP
 # syntax is check_snmp_uptime!optional_snmp_community!optional_minutes_uptime_warn_threshold
 define service{
-        use                             generic-24x7-service
+        use                             generic-service
         hostgroup_name                  all_windows,all_linux,all_cisco
         service_description             uptime
         check_command                   check_snmp_uptime!optional_snmp_community!optional_minutes_uptime_warn_threshold
@@ -30,4 +30,12 @@ define command{
 ```
 
 Copy the `check_snmp_uptime` file to `/usr/local/nagios/libexec/` (or wherever your distro keeps nagios checks)
+
+# Ouput
+If the uptime is less than one day, the output will be shown in minutes.  For example:
+```uptime OK - uptime is 122 minutes```
+If the uptime is more than one day, the output will be shown in days.  For example:
+```uptime OK - uptime is 17 days | uptime_days=2;;;;```
+If the uptime is less than the threshold, an alert will be shown.  For example:
+```uptime WARN - uptime is 3 minutes | uptime_days=0;;;```
 
