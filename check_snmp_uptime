@@ -14,6 +14,8 @@
 # ----------
 #   2020-10-18  njeffrey	Script created
 #   2020-10-30  njeffrey	Bug fix detect if $uptime is undefined due to SNMP timeout
+#   2022-05-12  njeffrey	Add nagios performance data to output
+
 
 
 
@@ -69,8 +71,9 @@ use Getopt::Long;				# require perl module.  Should be in base  perl install.  O
 
 
 # define variables
-my ($snmpwalk,$snmpget,$community,$host,$output,$uptime,$warn);
+my ($snmpwalk,$snmpget,$community,$host,$output,$warn,$perf_data);
 my ($oid,$oid_value,$oid_sysUptime,$oid_hostUptime,$oid_snmpEngineTime);
+my ($uptime_minutes,$uptime_days);
 my ($opt_h,$opt_H,$opt_C,$opt_v,$opt_w);
 my ($cmd,$verbose);
 my ($OK,$WARN,$CRITICAL,$UNKNOWN,$CHECK_NAME);				#define variables
@@ -179,21 +182,24 @@ sub get_uptime {
       $cmd = "$snmpget -Ont -v 1 -c $community $host $oid";  #use -Ont to output numeric OID and timeticks
       print "   running command: $cmd \n" if ($verbose eq "yes");
       open (IN,"$cmd 2>&1|");	#open filehandle
-      while (<IN>) {						#read a line from the filehandle
-         $oid_value = 0;					#initialize variable
-         s/\"//g;						#get rid of any quotation marks in the output
-         if ( /$oid = ([0-9]+)/) {				#parse out the line of output into OID and value
-            $oid_value = $1;					#assign more meaningful variable name
+      while (<IN>) {							#read a line from the filehandle
+         $oid_value = 0;						#initialize variable
+         s/\"//g;							#get rid of any quotation marks in the output
+         if ( /$oid = ([0-9]+)/) {					#parse out the line of output into OID and value
+            $oid_value = $1;						#assign more meaningful variable name
             print "   found OID $oid timeticks $oid_value  \n" if ($verbose eq "yes");
-            if ($oid_value > 0 ) {				#convert timeticks from hundredths of seconds to dd:hh:mm uptime
-               $uptime = $oid_value / 100 / 60; 
-               $uptime = sprintf("%.0f",$uptime);               #truncate to 0 decimal places
-            }							#end of if block
-         }							#end of if block
-      }								#end of while loop
-      close IN;							#close filehandle
-   }								#end of foreach loop
-}		 						#end of subroutine
+            if ($oid_value > 0 ) {					#confirm uptime is greater than zero
+               $uptime_minutes = $oid_value / 100 / 60;			#convert timeticks from hundredths of seconds to minutes
+               $uptime_minutes = sprintf("%.0f",$uptime_minutes);	#truncate to 0 decimal places (closest minute is good enough)
+               $uptime_days    = $oid_value / 100 / 60 / 60 / 24;	#convert timeticks from hundredths of seconds to days
+               $uptime_days    = sprintf("%.0f",$uptime_days);		#truncate to 0 decimal places (closest day is good enough)
+               print "   uptime minutes:$uptime_minutes days:$uptime_days \n" if ($verbose eq "yes");
+            }								#end of if block
+         }								#end of if block
+      }									#end of while loop
+      close IN;								#close filehandle
+   }									#end of foreach loop
+}		 							#end of subroutine
 
 
 
@@ -203,25 +209,41 @@ sub print_output {
    #
    print "running print_output subroutine \n" if ($verbose eq "yes");
    #
-   unless ($uptime) {						#catch undefined variable if there was no SNMP response
+   #
+   # The nagios performance data will be the same for all the outputs, so just put it in a variable that can be use by all the output options
+   #
+   # The format is:  label=value[UOM];[warn];[crit];[min];[max]
+   # On the "label=value" section is required.  The warn|crit|min|max entries are optional.
+   # You can have multiple items of perf data, just separate each section with a space
+   # UOM is Units Of Measurement.    Can be s=seconds B=bytes MB=megabytes %=percent c=counter
+   # You can use the standard nagios ranges and thresholds formats (examples below)
+   # Range definition   Generate an alert if x...
+   # ----------------   -------------------------
+   # 10                 < 0 or > 10, (outside the range of {0 .. 10})
+   # 10:                < 10, (outside {10 .. ∞})
+   # ~:10               > 10, (outside the range of {-∞ .. 10})
+   # 10:20              < 10 or > 20, (outside the range of {10 .. 20})
+   # @10:20             ≥ 10 and ≤ 20, (inside the range of {10 .. 20})
+   #
+   $perf_data = "uptime_days=$uptime_days;;;;";			#for long term performance data graphing, just days is good enough.  No need to graph minutes of uptime.
+
+   unless ($uptime_minutes) {						#catch undefined variable if there was no SNMP response
       print "$CHECK_NAME UNKNOWN - could not determine uptime via SNMP query.  Please check SNMP configuration. \n";	
       exit $UNKNOWN;
    }
-   print "   uptime=$uptime warn=$warn \n" if ($verbose eq "yes");
-   if ($uptime <= $warn ) {
-      print "$CHECK_NAME WARN - recent reboot detected - uptime is $uptime minutes \n";	
+   print "   uptime_minutes=$uptime_minutes warn=$warn \n" if ($verbose eq "yes");
+   if ($uptime_minutes <= $warn ) {
+      print "$CHECK_NAME WARN - recent reboot detected - uptime is $uptime_minutes minutes | $perf_data \n";	
       exit $WARN;
    }
-   if ($uptime > $warn ) {
+   if ($uptime_minutes > $warn ) {
       #
       # display output in days if uptime is more than 60 minutes * 24 hours
-      if ($uptime > 1440 ) {
-         $uptime = $uptime / 1440; 
-         $uptime = sprintf("%.1f",$uptime);	               #truncate to 1 decimal places
-         print "$CHECK_NAME OK - uptime is $uptime days \n";	#describe uptime in days
+      if ($uptime_minutes > 1440 ) {
+         print "$CHECK_NAME OK - uptime is $uptime_days days | $perf_data \n";	#describe uptime in days
          exit $OK;
       } else {
-         print "$CHECK_NAME OK - uptime is $uptime minutes \n";	#describe uptime in minutes
+         print "$CHECK_NAME OK - uptime is $uptime_minutes minutes | $perf_data\n";	#describe uptime in minutes (but $perf_data will still be in days to keep the graphs consistent)
          exit $OK;
       }								#end of if/else block
    }								#end of if block
