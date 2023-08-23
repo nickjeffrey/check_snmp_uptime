@@ -31,7 +31,7 @@ define command{
 
 Copy the `check_snmp_uptime` file to `/usr/local/nagios/libexec/` (or wherever your distro keeps nagios checks)
 
-# Ouput
+# Output
 If the uptime is less than one day, the output will be shown in minutes.  For example:
 ```
     uptime OK - uptime is 122 minutes
